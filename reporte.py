@@ -26,6 +26,7 @@ YAHOO_MAP = {
 # Activos con valor fijo (FCIs, no cotizan en bolsa)
 VALOR_FIJO = {
     "COCOA": {"valor_total": 574245.02, "descripcion": "Cocos Ahorro FCI"},
+    "TZXD6": {"valor_total": 123978.37, "descripcion": "Bono CER TZXD6"},
 }
 
 def cargar_cartera():
