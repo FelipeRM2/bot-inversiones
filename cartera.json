@@ -1,6 +1,50 @@
 {
-  "EJEMPLO": {
-    "cantidad": 100,
-    "precio_compra": 1000.00
+  "COCOA": {
+    "cantidad": 252406.51,
+    "precio_compra": 2.274
+  },
+  "PAMP": {
+    "cantidad": 32,
+    "precio_compra": 5020.00
+  },
+  "AAPL": {
+    "cantidad": 7,
+    "precio_compra": 22930.00
+  },
+  "AMZN": {
+    "cantidad": 53,
+    "precio_compra": 2582.50
+  },
+  "VALE": {
+    "cantidad": 11,
+    "precio_compra": 11380.00
+  },
+  "TSLA": {
+    "cantidad": 3,
+    "precio_compra": 41360.00
+  },
+  "TZXD6": {
+    "cantidad": 43063,
+    "precio_compra": 2.874
+  },
+  "NVDA": {
+    "cantidad": 9,
+    "precio_compra": 13210.00
+  },
+  "ITUB": {
+    "cantidad": 10,
+    "precio_compra": 11240.00
+  },
+  "VIST": {
+    "cantidad": 3,
+    "precio_compra": 37420.00
+  },
+  "META": {
+    "cantidad": 3,
+    "precio_compra": 37200.00
+  },
+  "BBD": {
+    "cantidad": 18,
+    "precio_compra": 4977.50
   }
 }
