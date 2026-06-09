@@ -9,7 +9,6 @@ CHAT_ID      = os.environ["TELEGRAM_CHAT_ID"]
 CARTERA_FILE = "cartera.json"
 TZ_ARG       = ZoneInfo("America/Argentina/Buenos_Aires")
 
-# Mapa de tickers locales a Yahoo Finance (.BA = Bolsa Argentina)
 YAHOO_MAP = {
     "PAMP":   "PAMP.BA",
     "AAPLD":  "AAPL.BA",
@@ -31,12 +30,12 @@ def cargar_cartera():
     with open(CARTERA_FILE) as f:
         return json.load(f)
 
-async def obtener_precio(ticker):
+async def obtener_datos(ticker):
+    """Devuelve (precio_actual, precio_cierre_ayer, variacion_pct)"""
     yahoo_ticker = YAHOO_MAP.get(ticker, ticker + ".BA")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
         "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
     }
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
@@ -45,12 +44,14 @@ async def obtener_precio(ticker):
                 headers=headers
             )
             if r.status_code == 200:
-                data = r.json()
-                precio = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
-                return float(precio)
+                meta = r.json()["chart"]["result"][0]["meta"]
+                precio     = float(meta["regularMarketPrice"])
+                cierre_ayer = float(meta["chartPreviousClose"])
+                variacion_pct = ((precio - cierre_ayer) / cierre_ayer) * 100
+                return precio, cierre_ayer, variacion_pct
     except Exception as e:
         print(f"Error {ticker}: {e}")
-    return None
+    return None, None, None
 
 async def main():
     cartera = cargar_cartera()
@@ -60,39 +61,41 @@ async def main():
         return
 
     ahora = datetime.now(TZ_ARG).strftime("%d/%m/%Y %H:%M")
-    lineas = [f"📊 *Resumen* — {ahora}\n"]
-    total_inv, total_act = 0.0, 0.0
+    lineas = [f"📊 *Resumen del día* — {ahora}\n"]
+    
+    total_ganancia_dia = 0.0
+    total_valor = 0.0
 
     for ticker, d in cartera.items():
-        cant, pc = d["cantidad"], d["precio_compra"]
-        inv = cant * pc
-        precio = await obtener_precio(ticker)
+        cant = d["cantidad"]
+        precio, cierre_ayer, var_pct = await obtener_datos(ticker)
+        
         if precio is None:
             lineas.append(f"⚠️ *{ticker}* — sin cotización")
-            total_inv += inv
             continue
-        val = cant * precio
-        gan = val - inv
-        pct = (gan / inv * 100) if inv else 0
-        e = "🟢" if gan >= 0 else "🔴"
-        s = "+" if gan >= 0 else ""
-        lineas.append(
-            f"{e} *{ticker}*\n"
-            f"   {cant:,.0f} u. | Compra: ${pc:,.2f} | Actual: ${precio:,.2f}\n"
-            f"   Valor: ${val:,.2f} ({s}{pct:.1f}%) | Ganancia: {s}${gan:,.2f}"
-        )
-        total_inv += inv
-        total_act += val
 
-    gan_t = total_act - total_inv
-    pct_t = (gan_t / total_inv * 100) if total_inv else 0
-    s = "+" if gan_t >= 0 else ""
-    e = "🟢" if gan_t >= 0 else "🔴"
+        valor_hoy   = cant * precio
+        valor_ayer  = cant * cierre_ayer
+        ganancia_dia = valor_hoy - valor_ayer
+
+        e = "🟢" if ganancia_dia >= 0 else "🔴"
+        s = "+" if ganancia_dia >= 0 else ""
+
+        lineas.append(
+            f"{e} *{ticker}* ({s}{var_pct:.2f}% hoy)\n"
+            f"   {cant:,.0f} u. × ${precio:,.2f}\n"
+            f"   Valor: ${valor_hoy:,.2f} | Hoy: {s}${ganancia_dia:,.2f}"
+        )
+
+        total_ganancia_dia += ganancia_dia
+        total_valor += valor_hoy
+
+    s = "+" if total_ganancia_dia >= 0 else ""
+    e = "🟢" if total_ganancia_dia >= 0 else "🔴"
     lineas.append(
         f"\n{'─'*28}\n"
-        f"{e} *Invertido:* ${total_inv:,.2f}\n"
-        f"{e} *Actual:*    ${total_act:,.2f}\n"
-        f"{e} *Resultado:* {s}${gan_t:,.2f} ({s}{pct_t:.1f}%)"
+        f"💼 *Valor total:* ${total_valor:,.2f}\n"
+        f"{e} *Ganancia del día:* {s}${total_ganancia_dia:,.2f}"
     )
 
     bot = Bot(TOKEN)
