@@ -2,8 +2,17 @@ name: Reporte diario inversiones
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'  # 21hs Argentina
   workflow_dispatch:
+    inputs:
+      cocoa:
+        description: 'Valor COCOA (ej: 574245)'
+        required: false
+        default: ''
+      tzxd6:
+        description: 'Valor TZXD6 (ej: 123978)'
+        required: false
+        default: ''
 
 jobs:
   reporte:
@@ -22,4 +31,12 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python reporte.py
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.cocoa }}" ]; then
+            ARGS="$ARGS COCOA=${{ github.event.inputs.cocoa }}"
+          fi
+          if [ -n "${{ github.event.inputs.tzxd6 }}" ]; then
+            ARGS="$ARGS TZXD6=${{ github.event.inputs.tzxd6 }}"
+          fi
+          python reporte.py $ARGS
