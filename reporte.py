@@ -1,4 +1,4 @@
-import os, json, asyncio
+import os, json, asyncio, sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import httpx
@@ -10,23 +10,16 @@ CARTERA_FILE = "cartera.json"
 TZ_ARG       = ZoneInfo("America/Argentina/Buenos_Aires")
 
 YAHOO_MAP = {
-    "PAMP":   "PAMP.BA",
-    "AAPLD":  "AAPL.BA",
-    "AMZND":  "AMZN.BA",
-    "TSLAD":  "TSLA.BA",
-    "NVDAD":  "NVDA.BA",
-    "METAD":  "META.BA",
-    "VALED":  "VALE.BA",
-    "ITUBD":  "ITUB.BA",
-    "BBDD":   "BBD.BA",
-    "VISTD":  "VIST.BA",
-    "TZXD6":  "TZXD6.BA",
-}
-
-# Activos con valor fijo (FCIs, no cotizan en bolsa)
-VALOR_FIJO = {
-    "COCOA": {"valor_total": 574245.02, "descripcion": "Cocos Ahorro FCI"},
-    "TZXD6": {"valor_total": 123978.37, "descripcion": "Bono CER TZXD6"},
+    "PAMP":  "PAMP.BA",
+    "AAPLD": "AAPL.BA",
+    "AMZND": "AMZN.BA",
+    "TSLAD": "TSLA.BA",
+    "NVDAD": "NVDA.BA",
+    "METAD": "META.BA",
+    "VALED": "VALE.BA",
+    "ITUBD": "ITUB.BA",
+    "BBDD":  "BBD.BA",
+    "VISTD": "VIST.BA",
 }
 
 def cargar_cartera():
@@ -37,16 +30,10 @@ def cargar_cartera():
 
 async def obtener_datos(ticker):
     yahoo_ticker = YAHOO_MAP.get(ticker, ticker + ".BA")
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
-        "Accept": "application/json",
-    }
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"}
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            r = await client.get(
-                f"https://query2.finance.yahoo.com/v8/finance/chart/{yahoo_ticker}",
-                headers=headers
-            )
+            r = await client.get(f"https://query2.finance.yahoo.com/v8/finance/chart/{yahoo_ticker}", headers=headers)
             if r.status_code == 200:
                 meta = r.json()["chart"]["result"][0]["meta"]
                 precio      = float(meta["regularMarketPrice"])
@@ -59,10 +46,17 @@ async def obtener_datos(ticker):
 
 async def main():
     cartera = cargar_cartera()
-    if not cartera:
-        bot = Bot(TOKEN)
-        await bot.send_message(chat_id=CHAT_ID, text="📭 Cartera vacía.")
-        return
+
+    # Valores fijos pasados como argumentos: python reporte.py COCOA=574245 TZXD6=123978
+    valores_fijos = {}
+    for arg in sys.argv[1:]:
+        if "=" in arg:
+            k, v = arg.split("=")
+            valores_fijos[k.upper()] = float(v.replace(",", "."))
+
+    # Valores por defecto si no se pasan argumentos
+    cocoa_val = valores_fijos.get("COCOA", cartera.get("COCOA", {}).get("valor_total", 0))
+    tzxd6_val = valores_fijos.get("TZXD6", cartera.get("TZXD6", {}).get("valor_total", 0))
 
     ahora = datetime.now(TZ_ARG).strftime("%d/%m/%Y %H:%M")
     lineas = [f"📊 *Resumen del día* — {ahora}\n"]
@@ -70,41 +64,35 @@ async def main():
     total_ganancia_dia = 0.0
     total_valor        = 0.0
 
+    # COCOA y TZXD6 como valores fijos
+    if cocoa_val:
+        lineas.append(f"💰 *COCOA* — Cocos Ahorro FCI\n   Valor: ${cocoa_val:,.2f} _(rinde diario)_")
+        total_valor += cocoa_val
+
     for ticker, d in cartera.items():
-        cant = d["cantidad"]
-
-        # Activo con valor fijo (FCI)
-        if ticker in VALOR_FIJO:
-            info  = VALOR_FIJO[ticker]
-            valor = info["valor_total"]
-            lineas.append(
-                f"💰 *{ticker}* — {info['descripcion']}\n"
-                f"   Valor: ${valor:,.2f} _(rinde diario, sin variación bursátil)_"
-            )
-            total_valor += valor
+        if ticker in ("COCOA", "TZXD6"):
             continue
-
+        cant = d["cantidad"]
         precio, cierre_ayer, var_pct = await obtener_datos(ticker)
-
         if precio is None:
             lineas.append(f"⚠️ *{ticker}* — sin cotización")
             continue
-
         valor_hoy    = cant * precio
         valor_ayer   = cant * cierre_ayer
         ganancia_dia = valor_hoy - valor_ayer
-
         e = "🟢" if ganancia_dia >= 0 else "🔴"
         s = "+" if ganancia_dia >= 0 else ""
-
         lineas.append(
             f"{e} *{ticker}* ({s}{var_pct:.2f}% hoy)\n"
             f"   {cant:,.0f} u. × ${precio:,.2f}\n"
             f"   Valor: ${valor_hoy:,.2f} | Hoy: {s}${ganancia_dia:,.2f}"
         )
-
         total_ganancia_dia += ganancia_dia
         total_valor        += valor_hoy
+
+    if tzxd6_val:
+        lineas.append(f"💰 *TZXD6* — Bono CER\n   Valor: ${tzxd6_val:,.2f} _(ajusta por CER)_")
+        total_valor += tzxd6_val
 
     s = "+" if total_ganancia_dia >= 0 else ""
     e = "🟢" if total_ganancia_dia >= 0 else "🔴"
