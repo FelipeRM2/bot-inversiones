@@ -28,6 +28,16 @@ def cargar_cartera():
     with open(CARTERA_FILE) as f:
         return json.load(f)
 
+def parsear_numero_arg(s):
+    """Convierte '574.245,02' (formato argentino) a 574245.02 (float)"""
+    if not s:
+        return 0.0
+    s = s.strip()
+    # Si tiene coma, es el separador decimal -> sacar puntos de miles y cambiar coma por punto
+    if "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    return float(s)
+
 async def obtener_datos(ticker):
     yahoo_ticker = YAHOO_MAP.get(ticker, ticker + ".BA")
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"}
@@ -44,19 +54,24 @@ async def obtener_datos(ticker):
         print(f"Error {ticker}: {e}")
     return None, None, None
 
+def fmt(n):
+    """Formatea un numero con separador de miles . y decimal , (formato argentino)"""
+    s = f"{n:,.2f}"
+    # f-string da formato US (1,234.56) -> convertir a AR (1.234,56)
+    s = s.replace(",", "TEMP").replace(".", ",").replace("TEMP", ".")
+    return s
+
 async def main():
     cartera = cargar_cartera()
 
-    # Valores fijos pasados como argumentos: python reporte.py COCOA=574245 TZXD6=123978
     valores_fijos = {}
     for arg in sys.argv[1:]:
         if "=" in arg:
             k, v = arg.split("=")
-            valores_fijos[k.upper()] = float(v.replace(",", "."))
+            valores_fijos[k.upper()] = parsear_numero_arg(v)
 
-    # Valores por defecto si no se pasan argumentos
-    cocoa_val = valores_fijos.get("COCOA", cartera.get("COCOA", {}).get("valor_total", 0))
-    tzxd6_val = valores_fijos.get("TZXD6", cartera.get("TZXD6", {}).get("valor_total", 0))
+    cocoa_val = valores_fijos.get("COCOA", 0)
+    tzxd6_val = valores_fijos.get("TZXD6", 0)
 
     ahora = datetime.now(TZ_ARG).strftime("%d/%m/%Y %H:%M")
     lineas = [f"📊 *Resumen del día* — {ahora}\n"]
@@ -64,9 +79,8 @@ async def main():
     total_ganancia_dia = 0.0
     total_valor        = 0.0
 
-    # COCOA y TZXD6 como valores fijos
     if cocoa_val:
-        lineas.append(f"💰 *COCOA* — Cocos Ahorro FCI\n   Valor: ${cocoa_val:,.2f} _(rinde diario)_")
+        lineas.append(f"💰 *COCOA* — Cocos Ahorro FCI\n   Valor: ${fmt(cocoa_val)} _(rinde diario)_")
         total_valor += cocoa_val
 
     for ticker, d in cartera.items():
@@ -84,22 +98,22 @@ async def main():
         s = "+" if ganancia_dia >= 0 else ""
         lineas.append(
             f"{e} *{ticker}* ({s}{var_pct:.2f}% hoy)\n"
-            f"   {cant:,.0f} u. × ${precio:,.2f}\n"
-            f"   Valor: ${valor_hoy:,.2f} | Hoy: {s}${ganancia_dia:,.2f}"
+            f"   {cant:,.0f} u. × ${fmt(precio)}\n"
+            f"   Valor: ${fmt(valor_hoy)} | Hoy: {s}${fmt(ganancia_dia)}"
         )
         total_ganancia_dia += ganancia_dia
         total_valor        += valor_hoy
 
     if tzxd6_val:
-        lineas.append(f"💰 *TZXD6* — Bono CER\n   Valor: ${tzxd6_val:,.2f} _(ajusta por CER)_")
+        lineas.append(f"💰 *TZXD6* — Bono CER\n   Valor: ${fmt(tzxd6_val)} _(ajusta por CER)_")
         total_valor += tzxd6_val
 
     s = "+" if total_ganancia_dia >= 0 else ""
     e = "🟢" if total_ganancia_dia >= 0 else "🔴"
     lineas.append(
         f"\n{'─'*28}\n"
-        f"💼 *Valor total cartera:* ${total_valor:,.2f}\n"
-        f"{e} *Ganancia del día:* {s}${total_ganancia_dia:,.2f}"
+        f"💼 *Valor total cartera:* ${fmt(total_valor)}\n"
+        f"{e} *Ganancia del día:* {s}${fmt(total_ganancia_dia)}"
     )
 
     bot = Bot(TOKEN)
